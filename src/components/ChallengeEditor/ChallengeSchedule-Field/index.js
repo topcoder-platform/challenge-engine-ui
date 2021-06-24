@@ -9,9 +9,8 @@ import jstz from 'jstimezonedetect'
 import PhaseInput from '../../PhaseInput'
 import Chart from 'react-google-charts'
 import Select from '../../Select'
+import SwitchButton from '../../SwitchButton'
 import { parseSVG } from '../../../util/svg'
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faTrash } from '@fortawesome/free-solid-svg-icons'
 import PrimaryButton from '../../Buttons/PrimaryButton'
 
 const GANTT_ROW_HEIGHT = 45
@@ -181,11 +180,12 @@ class ChallengeScheduleField extends Component {
   }
 
   renderPhaseEditor () {
-    const { onUpdateSelect, onUpdatePhase, removePhase, challenge, readOnly } = this.props
+    const { onUpdateSelect, challengePhases, onUpdatePhase, togglePhase, challenge, readOnly } = this.props
     return (
       _.map(challenge.phases, (p, index) => (
         <div className={styles.PhaseRow} key={index}>
           <PhaseInput
+            challengePhases={challengePhases}
             phase={this.getPhaseTemplate(p)}
             withDuration
             onUpdateSelect={onUpdateSelect}
@@ -193,11 +193,12 @@ class ChallengeScheduleField extends Component {
             endDate={moment(p.scheduledEndDate)}
             readOnly={readOnly}
           />
-          {index !== 0 && !readOnly &&
+          {!readOnly && <div className={styles.switchButton}><SwitchButton checked={p.isOpen} onChange={(v) => togglePhase(index, v.target.checked)} /></div>}
+          {/* {index !== 0 && !readOnly &&
           <div className={styles.icon} onClick={() => removePhase(index)}>
             <FontAwesomeIcon icon={faTrash} />
           </div>
-          }
+          } */}
         </div>
       )
       ))
@@ -315,7 +316,7 @@ class ChallengeScheduleField extends Component {
   render () {
     const { isEdit } = this.state
     const { currentTemplate, readOnly, templates } = this.props
-    const { savePhases, resetPhase, challenge, onUpdateOthers } = this.props
+    const { savePhases, challenge, onUpdateOthers } = this.props
     const timelines = !isEdit ? this.prepareTimeline() : null
     const chartHeight = `${(this.getAllPhases().length * GANTT_ROW_HEIGHT) + GANTT_FOOTER_HEIGHT}px`
     return (
@@ -330,12 +331,12 @@ class ChallengeScheduleField extends Component {
                 <span>{currentTemplate ? currentTemplate.name : ''}</span>
               ) : (
                 <Select
+                  onChange={option => this.props.onUpdateOthers({ value: option.value, field: 'timelineTemplateId' })}
                   name='template'
-                  options={templates.map(template => ({ label: template.name, value: template.name, name: template.name }))}
+                  options={templates.map(template => ({ label: template.name, value: template.id, name: template.name }))}
                   placeholder='Select'
                   isClearable={false}
                   value={currentTemplate && { label: currentTemplate.name, value: currentTemplate.name }}
-                  onChange={(e) => resetPhase(e)}
                 />
               )}
             </div>
@@ -415,10 +416,6 @@ class ChallengeScheduleField extends Component {
               text={'Save Phases'}
               type={'info'}
               onClick={() => savePhases()} />
-            <PrimaryButton
-              text={'Reset Phases'}
-              type={'info'}
-              onClick={() => resetPhase(currentTemplate)} />
           </div>
         </div>)}
         {
@@ -433,7 +430,7 @@ ChallengeScheduleField.defaultProps = {
   templates: [],
   currentTemplate: null,
   removePhase: () => {},
-  resetPhase: () => {},
+  togglePhase: () => {},
   savePhases: () => {},
   onUpdateSelect: () => {},
   onUpdatePhase: () => {},
@@ -445,8 +442,7 @@ ChallengeScheduleField.propTypes = {
   templates: PropTypes.arrayOf(PropTypes.shape()).isRequired,
   challengePhases: PropTypes.arrayOf(PropTypes.shape()).isRequired,
   challenge: PropTypes.shape().isRequired,
-  removePhase: PropTypes.func,
-  resetPhase: PropTypes.func,
+  togglePhase: PropTypes.func,
   savePhases: PropTypes.func,
   onUpdateSelect: PropTypes.func,
   onUpdatePhase: PropTypes.func,

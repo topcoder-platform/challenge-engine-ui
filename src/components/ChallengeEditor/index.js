@@ -20,7 +20,7 @@ import {
   MESSAGE,
   COMMUNITY_APP_URL,
   DES_TRACK_ID,
-  CHALLENGE_TYPE_ID,
+  // CHALLENGE_TYPE_ID,
   REVIEW_TYPES
 } from '../../config/constants'
 import { PrimaryButton, OutlineButton } from '../Buttons'
@@ -35,6 +35,7 @@ import GroupsField from './Groups-Field'
 import CopilotFeeField from './CopilotFee-Field'
 import ChallengeTotalField from './ChallengeTotal-Field'
 import ChallengePrizesField from './ChallengePrizes-Field'
+import CheckpointPrizesField from './CheckpointPrizes-Field'
 import AttachmentField from './Attachment-Field'
 import TextEditorField from './TextEditor-Field'
 import Loader from '../Loader'
@@ -51,6 +52,7 @@ import LegacyLinks from '../LegacyLinks'
 import AssignedMemberField from './AssignedMember-Field'
 import Tooltip from '../Tooltip'
 import UseSchedulingAPIField from './UseSchedulingAPIField'
+import PureV5Field from './PureV5Field'
 import { getResourceRoleByName } from '../../util/tc'
 import { isBetaMode } from '../../util/cookie'
 
@@ -102,7 +104,9 @@ class ChallengeEditor extends Component {
     this.toggleAdvanceSettings = this.toggleAdvanceSettings.bind(this)
     this.toggleNdaRequire = this.toggleNdaRequire.bind(this)
     this.toggleUseSchedulingAPI = this.toggleUseSchedulingAPI.bind(this)
+    this.togglePureV5 = this.togglePureV5.bind(this)
     this.removePhase = this.removePhase.bind(this)
+    this.togglePhase = this.togglePhase.bind(this)
     this.resetPhase = this.resetPhase.bind(this)
     this.savePhases = this.savePhases.bind(this)
     this.toggleLaunch = this.toggleLaunch.bind(this)
@@ -613,6 +617,14 @@ class ChallengeEditor extends Component {
     this.setState({ challenge: newChallenge })
   }
 
+  togglePureV5 () {
+    const { challenge } = this.state
+    const newChallenge = { ...challenge }
+    const pureV5 = !_.get(newChallenge, 'legacy.pureV5', false)
+    _.set(newChallenge, 'legacy.pureV5', pureV5)
+    this.setState({ challenge: newChallenge })
+  }
+
   /**
    * Remove Phase from challenge Phases list
    * @param index
@@ -626,6 +638,19 @@ class ChallengeEditor extends Component {
     this.setState({ challenge: newChallenge })
   }
 
+  /**
+   * Toggle Phase from challenge Phases list
+   * @param index
+   * @param checked
+   */
+  togglePhase (index, checked) {
+    const { challenge: oldChallenge } = this.state
+    const newChallenge = { ...oldChallenge }
+    const newPhaseList = _.cloneDeep(oldChallenge.phases)
+    newPhaseList[index].isOpen = checked
+    newChallenge.phases = _.clone(newPhaseList)
+    this.setState({ challenge: newChallenge })
+  }
   /**
    * Save updated  challenge Phases
    */
@@ -643,7 +668,7 @@ class ChallengeEditor extends Component {
   async resetPhase (timeline) {
     const { challenge: oldChallenge } = this.state
     const newChallenge = { ...oldChallenge }
-    newChallenge.phases = []
+    newChallenge.phases = timeline ? this.getTemplatePhases(timeline) : []
     this.setState({
       currentTemplate: timeline,
       challenge: newChallenge
@@ -844,24 +869,28 @@ class ChallengeEditor extends Component {
   async createNewChallenge () {
     if (!this.props.isNew) return
     const { metadata, createChallenge, projectDetail } = this.props
-    const { showDesignChallengeWarningModel, challenge: { name, trackId, typeId } } = this.state
+    const {
+      /** showDesignChallengeWarningModel, **/
+      challenge: { name, trackId, typeId }
+    } = this.state
     const { timelineTemplates } = metadata
     const isDesignChallenge = trackId === DES_TRACK_ID
-    const isChallengeType = typeId === CHALLENGE_TYPE_ID
+    // const isChallengeType = typeId === CHALLENGE_TYPE_ID
 
-    if (!showDesignChallengeWarningModel && isDesignChallenge && isChallengeType) {
-      this.setState({
-        showDesignChallengeWarningModel: true
-      })
-      return
-    }
+    // This is no longer needed but leaving it just in case
+    // if (!showDesignChallengeWarningModel && isDesignChallenge && isChallengeType) {
+    //   this.setState({
+    //     showDesignChallengeWarningModel: true
+    //   })
+    //   return
+    // }
 
     // indicate that creating process has started
     this.setState({ isSaving: true })
 
     // fallback template
     const STD_DEV_TIMELINE_TEMPLATE = _.find(timelineTemplates, { name: 'Standard Development' })
-    const avlTemplates = this.getAvailableTimelineTemplates()
+    const avlTemplates = this.getAvailableTimelineTemplates(true)
     // chooses first available timeline template or fallback template for the new challenge
     const defaultTemplate = avlTemplates && avlTemplates.length > 0 ? avlTemplates[0] : STD_DEV_TIMELINE_TEMPLATE
     const isTask = _.find(metadata.challengeTypes, { id: typeId, isTask: true })
@@ -936,17 +965,16 @@ class ChallengeEditor extends Component {
     See issue which caused by using of this method https://github.com/topcoder-platform/work-manager/issues/1012
   */
   getTemplatePhases (template) {
-    const timelinePhaseIds = template.phases.map(timelinePhase => timelinePhase.phaseId || timelinePhase)
-    const validPhases = _.cloneDeep(this.props.metadata.challengePhases).filter(challengePhase => {
-      return timelinePhaseIds.includes(challengePhase.id)
-    })
-    validPhases.forEach(phase => {
-      delete Object.assign(phase, { phaseId: phase.id }).id
-    })
-    return validPhases.map(p => ({
-      duration: p.duration,
-      phaseId: p.phaseId
-    }))
+    // const timelinePhaseIds = template.phases.map(timelinePhase => timelinePhase.phaseId || timelinePhase)
+    const validPhases = []
+    for (const phase of template.phases) {
+      const phaseTemplate = _.find(this.props.metadata.challengePhases, p => p.id === (phase.phaseId || phase))
+      validPhases.push({
+        duration: phaseTemplate.duration,
+        phaseId: phaseTemplate.id
+      })
+    }
+    return validPhases
   }
 
   // getDefaultPrizeSets () {
@@ -1148,26 +1176,28 @@ class ChallengeEditor extends Component {
 
   getCurrentTemplate () {
     const { currentTemplate, challenge } = this.state
-    if (currentTemplate) {
-      return currentTemplate
-    }
     const { metadata } = this.props
     if (!challenge) {
       return null
     }
-    return _.find(metadata.timelineTemplates, { id: challenge.timelineTemplateId })
+    const templateFromChallenge = _.find(metadata.timelineTemplates, { id: challenge.timelineTemplateId })
+    if (!_.isEqual(templateFromChallenge, currentTemplate)) {
+      this.setState({ currentTemplate: templateFromChallenge })
+      this.resetPhase(templateFromChallenge)
+    }
+    return templateFromChallenge
   }
 
   /**
    * Filters the available timeline templates based on the challenge type
    */
-  getAvailableTimelineTemplates () {
+  getAvailableTimelineTemplates (onlyDefault) {
     const { challenge } = this.state
     const { metadata } = this.props
     const { challengeTimelines, timelineTemplates } = metadata
 
     // all timeline template ids available for the challenge type
-    const availableTemplateIds = _.filter(challengeTimelines, ct => ct.typeId === challenge.typeId && ct.trackId === challenge.trackId).map(tt => tt.timelineTemplateId)
+    const availableTemplateIds = _.filter(challengeTimelines, ct => ct.typeId === challenge.typeId && ct.trackId === challenge.trackId && (onlyDefault ? ct.isDefault : true)).map(tt => tt.timelineTemplateId)
     // filter and return timeline templates that are available for this challenge type
     return _.filter(timelineTemplates, tt => availableTemplateIds.indexOf(tt.id) !== -1)
   }
@@ -1200,6 +1230,7 @@ class ChallengeEditor extends Component {
       return <div>Error loading challenge</div>
     }
     const isTask = _.get(challenge, 'task.isTask', false)
+    const isPureV5 = _.get(challenge, 'legacy.pureV5', false)
     const { assignedMemberDetails, error } = this.state
     let isActive = false
     let isDraft = false
@@ -1380,7 +1411,7 @@ class ChallengeEditor extends Component {
               </div>
               {isDraft && (
                 <div className={styles.button}>
-                  {challenge.legacyId || isTask ? (
+                  {challenge.legacyId || isTask || isPureV5 ? (
                     <PrimaryButton text={'Launch as Active'} type={'info'} onClick={this.toggleLaunch} />
                   ) : (
                     <Tooltip content={MESSAGE.NO_LEGACY_CHALLENGE}>
@@ -1408,7 +1439,6 @@ class ChallengeEditor extends Component {
     const selectedType = _.find(metadata.challengeTypes, { id: challenge.typeId })
     const challengeTrack = _.find(metadata.challengeTracks, { id: challenge.trackId })
     const currentChallengeId = this.getCurrentChallengeId()
-    const showTimeline = false // disables the timeline for time being https://github.com/topcoder-platform/challenge-engine-ui/issues/706
     const challengeForm = isNew
       ? (
         <form name='challenge-new-form' noValidate autoComplete='off' onSubmit={this.createChallengeHandler}>
@@ -1495,6 +1525,9 @@ class ChallengeEditor extends Component {
                 {isBetaMode() && (
                   <UseSchedulingAPIField challenge={challenge} toggleUseSchedulingAPI={this.toggleUseSchedulingAPI} />
                 )}
+                {isBetaMode() && (
+                  <PureV5Field challenge={challenge} togglePureV5={this.togglePureV5} />
+                )}
               </React.Fragment>
             )}
             {!isTask && (
@@ -1526,20 +1559,23 @@ class ChallengeEditor extends Component {
                 />
               )
             }
-            { showTimeline && (
-              <ChallengeScheduleField
-                templates={this.getAvailableTimelineTemplates()}
-                challengePhases={metadata.challengePhases}
-                removePhase={this.removePhase}
-                resetPhase={this.resetPhase}
-                savePhases={this.savePhases}
-                challenge={challenge}
-                onUpdateSelect={this.onUpdateSelect}
-                onUpdatePhase={this.onUpdatePhase}
-                onUpdateOthers={this.onUpdateOthers}
-                currentTemplate={this.getCurrentTemplate()}
-              />
-            )}
+            {
+              isBetaMode() && (
+                <ChallengeScheduleField
+                  templates={this.getAvailableTimelineTemplates()}
+                  challengePhases={metadata.challengePhases}
+                  removePhase={this.removePhase}
+                  togglePhase={this.togglePhase}
+                  resetPhase={this.resetPhase}
+                  savePhases={this.savePhases}
+                  challenge={challenge}
+                  onUpdateSelect={this.onUpdateSelect}
+                  onUpdatePhase={this.onUpdatePhase}
+                  onUpdateOthers={this.onUpdateOthers}
+                  currentTemplate={this.getCurrentTemplate()}
+                />
+              )
+            }
           </div>
           <div className={styles.group}>
             <div className={styles.title}>Public specification <span>*</span></div>
@@ -1568,6 +1604,7 @@ class ChallengeEditor extends Component {
             />}
             <ChallengePrizesField challenge={challenge} onUpdateOthers={this.onUpdateOthers} />
             <CopilotFeeField challenge={challenge} onUpdateOthers={this.onUpdateOthers} />
+            {DES_TRACK_ID === challenge.trackId && isBetaMode() && <CheckpointPrizesField challenge={challenge} onUpdateOthers={this.onUpdateOthers} />}
             <ChallengeTotalField challenge={challenge} />
           </div>
           { errorContainer }
